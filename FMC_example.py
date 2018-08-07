@@ -19,9 +19,9 @@ dt_std = 2
 min_dt = 3
 
 
-max_samples = 3000  # Let see how well it can perform using at most 300 samples per step
-max_walkers = 100 # Let's set a really small number to make everthing faster
-time_horizon = 30  # 50 frames should be enough to realise you have been eaten by a ghost
+max_samples = 1000#3000  # Let see how well it can perform using at most 300 samples per step
+max_walkers = 50#100 # Let's set a really small number to make everthing faster
+time_horizon = 20#30  # 50 frames should be enough to realise you have been eaten by a ghost
 
 
 if __name__ == "__main__":

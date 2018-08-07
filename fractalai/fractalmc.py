@@ -267,7 +267,7 @@ class FractalMC(Swarm):
                               state=state, action=0, dt=1)
         reward_sum = 0
 
-        dqn_agent = DqnAgent
+        dqn_agent = DqnAgent()
         memory = ReplayMemory(10000)
 
         # last_screen = self.get_screen()
