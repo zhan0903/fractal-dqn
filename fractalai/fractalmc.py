@@ -4,7 +4,9 @@ from typing import Callable
 from IPython.core.display import clear_output
 from fractalai.model import DiscreteModel
 from fractalai.swarm import Swarm, DynamicTree
-from fractalai.dqn import DqnAgent, ReplayMemory
+from fractalai import dqn_agent
+from fractalai.lib import wrappers
+from fractalai.lib import dqn_model
 
 from collections import namedtuple
 from itertools import count
@@ -17,19 +19,25 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 
 import gym
+import collections
 
 
-D = 80 * 80  # input dimensionality: 80x80 grid
+Experience = collections.namedtuple('Experience', field_names=['state', 'action', 'reward', 'done', 'new_state'])
 
+DEFAULT_ENV_NAME = "PongNoFrameskip-v4"
+MEAN_REWARD_BOUND = 19.5
 
-def prepro(image):
-    """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
-    image = image[35:195]  # crop
-    image = image[::2, ::2, 0]  # downsample by factor of 2
-    image[image == 144] = 0  # erase background (background type 1)
-    image[image == 109] = 0  # erase background (background type 2)
-    image[image != 0] = 1  # everything else (paddles, ball) just set to 1
-    return image.astype(np.float).ravel()
+GAMMA = 0.99
+BATCH_SIZE = 32
+REPLAY_SIZE = 10000
+LEARNING_RATE = 1e-4
+SYNC_TARGET_FRAMES = 1000
+REPLAY_START_SIZE = 10000
+
+EPSILON_DECAY_LAST_FRAME = 10**5
+EPSILON_START = 1.0
+EPSILON_FINAL = 0.02
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class FractalMC(Swarm):
@@ -267,18 +275,13 @@ class FractalMC(Swarm):
                               state=state, action=0, dt=1)
         reward_sum = 0
 
-        dqn_agent = DqnAgent()
-        memory = ReplayMemory(10000)
+        net = dqn_model.DQN(self._env.observation_space.shape, self._env.action_space.n).to(device)
+        tgt_net = dqn_model.DQN(self._env.observation_space.shape, self._env.action_space.n).to(device)
+        buffer = dqn_agent.ExperienceBuffer(REPLAY_SIZE)
+        agent = dqn_agent.Agent(self._env, buffer)
+        optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
 
-        # last_screen = self.get_screen()
-        # current_screen = self.get_screen()
-        # obs = current_screen - last_screen
-
-        # my code
-        prev_x = None
-        cur_x = prepro(obs)
-        current_obs = cur_x - prev_x if prev_x is not None else np.zeros(D)
-        prev_x = cur_x
+        current_obs = obs
 
         while not end and self._agent_reward < self.reward_limit:
             i_step += 1
@@ -289,37 +292,26 @@ class FractalMC(Swarm):
             state, obs, _reward, _end, info = self._env.step(state=state, action=action,
                                                              n_repeat_action=self.min_dt)
 
-            # # new Observe
-            # last_screen = current_screen
-            # current_screen = self.get_screen()
-            # if not _end:
-            #     next_obs = current_screen - last_screen
-            # else:
-            #     next_obs = None
-
-            cur_x = prepro(obs)
             if not _end:
-                next_obs = cur_x - prev_x if prev_x is not None else np.zeros(D)
+                next_obs = obs
             else:
                 next_obs = None
-            prev_x = cur_x
 
-            memory.push(current_obs, action, next_obs, _reward)
+            #print("come here")
 
+            exp = Experience(current_obs, action, _reward, _end, next_obs)
             current_obs = next_obs
-            # Perform one step of the optimization (on the target network)
-            #dqn_agent.optimize_model()
+            agent.exp_buffer.append(exp)
 
             reward_sum += _reward
-
             self.tree.append_leaf(i_step, parent_id=i_step - 1,
                                   state=state, action=action, dt=self._env.n_repeat_action)
             self._agent_reward += _reward
             self._last_action = action
             end = info.get("terminal", _end)
 
-            if _reward != 0:
-                print("i_step,_reward,_end", i_step, _reward, _end)
+            #if _reward != 0:
+            #    print("i_step,_reward,_end", i_step, _reward, _end)
             if _end:
                 print('ep %d: game over. episode reward total was %f' % (i_step, reward_sum))
 
@@ -331,40 +323,32 @@ class FractalMC(Swarm):
             self.update_parameters()
 
         # train dqn model
-        print("training dqn model...")
-        num_episodes = 500
+
+        print("**************training dqn model*******************")
+        num_episodes = 1000
         reward_sum = 0
         for i_episode in range(num_episodes):
-            dqn_agent.optimize_model(memory=memory)
-            if i_episode % dqn_agent.target_update == 0:
-                dqn_agent.target_net.load_state_dict(dqn_agent.policy_net.state_dict())
-
-        # text dqn model
-        print("test the learned dqn model...")
-        env = gym.make('Pong-v0').unwrapped
-        obs = env.reset()
-
-        prev_x = None
-        cur_x = prepro(obs)
-        current_obs = cur_x - prev_x if prev_x is not None else np.zeros(D)
-        prev_x = cur_x
-
+            optimizer.zero_grad()
+            batch = agent.exp_buffer.sample(BATCH_SIZE)
+            loss_t = dqn_agent.calc_loss(batch, net, tgt_net, device=device)
+            loss_t.backward()
+            optimizer.step()
+        print("#############test the learned dqn model############")
+        env = gym.make('Pong-v0')
+        current_obs = env.reset()
         while True:
-            action = dqn_agent.select_action(current_obs)
-            obs, _reward, _end, _ = env.step(action.item())
+            state_a = np.array([current_obs], copy=False)
+            state_v = torch.tensor(state_a, dtype=torch.float).to(device)
+            q_vals_v = net(state_v)
+            _, act_v = torch.max(q_vals_v, dim=1)
+            action = int(act_v.item())
+            new_state, _reward, _end, _ = env.step(action)
+            current_obs = new_state
 
-            if _reward != 0:
-                print("_reward,_end", _reward, _end)
-
+            #if _reward != 0:
+            #    print("_reward,_end", _reward, _end)
             reward_sum += _reward
-
-            cur_x = prepro(obs)
-            if not _end:
-                current_obs = cur_x - prev_x if prev_x is not None else np.zeros(D)
-            else:
-                current_obs = None
-            prev_x = cur_x
-
             if _end:
                 print('game over. reward total was %f' % reward_sum)
                 break
+        print("################test over##########################")

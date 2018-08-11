@@ -1,8 +1,6 @@
 from fractalai.model import RandomDiscreteModel
 from fractalai.environment import ExternalProcess, ParallelEnvironment, AtariEnvironment
 from fractalai.fractalmc import FractalMC
-import gym
-
 
 
 name = "Pong-v0"
@@ -18,16 +16,15 @@ dt_mean = 3
 dt_std = 2
 min_dt = 3
 
-
-max_samples = 1000#3000  # Let see how well it can perform using at most 300 samples per step
-max_walkers = 50#100 # Let's set a really small number to make everthing faster
-time_horizon = 20#30  # 50 frames should be enough to realise you have been eaten by a ghost
+max_samples = 3000#3000  # Let see how well it can perform using at most 300 samples per step
+max_walkers = 100#100 # Let's set a really small number to make everthing faster
+time_horizon = 30#30  # 50 frames should be enough to realise you have been eaten by a ghost
 
 
 if __name__ == "__main__":
     # 16个并行环境，创建16个进程
     env = ParallelEnvironment(name=name,env_class=AtariEnvironment,
-                              blocking=False, n_workers=8, n_repeat_action=n_repeat_action)  # We will play an Atari game
+                              blocking=False, n_workers=4, n_repeat_action=n_repeat_action)  # We will play an Atari game
     model = RandomDiscreteModel(max_wakers=max_walkers,
                                 n_actions=env.n_actions)# The Agent will take discrete actions at random
     # print(env.unwrapped.get_action_meanings())

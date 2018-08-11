@@ -5,3 +5,4 @@ from .model import RandomDiscreteModel, \
                    ContinuousDiscretizedModel,DiscreteModel
 #from .dqn import DQN
 from .swarm import Swarm, DynamicTree
+from .lib import dqn_model, wrappers

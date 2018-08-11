@@ -220,7 +220,7 @@ class DqnAgent:
         self.target_net = DQN().to(device)
         self.optimizer = optim.RMSprop(self.policy_net.parameters())
         #self.memory = ReplayMemory(10000)
-        self.batch_size = 128
+        self.batch_size = 2
         self.gamma = 0.999
         self.target_update = 10
 
@@ -237,8 +237,11 @@ class DqnAgent:
         # Compute a mask of non-final states and concatenate the batch elements
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                                 batch.next_state)), device=device, dtype=torch.uint8)
-        non_final_next_states = torch.cat([s for s in batch.next_state
-                                           if s is not None])
+
+        #batch.state = torch.tensor([s for s in batch.state], device=device)
+        #batch.state = torch.from_numpy(batch.state)
+        #state_batch = torch.cat(batch.state)
+        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
