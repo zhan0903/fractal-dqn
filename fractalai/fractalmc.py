@@ -292,10 +292,13 @@ class FractalMC(Swarm):
             state, obs, _reward, _end, info = self._env.step(state=state, action=action,
                                                              n_repeat_action=self.min_dt)
 
-            if not _end:
-                next_obs = obs
-            else:
-                next_obs = None
+
+            # if not _end:
+            #     next_obs = obs
+            # else:
+            #     next_obs = None
+            #
+            next_obs = obs
 
             #print("come here")
 
@@ -325,6 +328,7 @@ class FractalMC(Swarm):
         # train dqn model
 
         print("**************training dqn model*******************")
+        #num_episodes = 1000
         num_episodes = 1000
         reward_sum = 0
         for i_episode in range(num_episodes):
