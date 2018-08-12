@@ -28,7 +28,7 @@ DEFAULT_ENV_NAME = "PongNoFrameskip-v4"
 MEAN_REWARD_BOUND = 19.5
 
 GAMMA = 0.99
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 REPLAY_SIZE = 10000
 LEARNING_RATE = 1e-4
 SYNC_TARGET_FRAMES = 1000
@@ -282,6 +282,7 @@ class FractalMC(Swarm):
         optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
 
         current_obs = obs
+        start_time = time.time()
 
         while not end and self._agent_reward < self.reward_limit:
             i_step += 1
@@ -326,20 +327,23 @@ class FractalMC(Swarm):
             self.update_parameters()
 
         # train dqn model
-
-        print("**************training dqn model*******************")
+        print("experiences exploration time/seconds:", time.time()-start_time)
+        print("**************dqn agent training...*******************")
         #num_episodes = 1000
-        num_episodes = 1000
+        num_episodes = 10000
         reward_sum = 0
+        start_time = time.time()
         for i_episode in range(num_episodes):
             optimizer.zero_grad()
             batch = agent.exp_buffer.sample(BATCH_SIZE)
             loss_t = dqn_agent.calc_loss(batch, net, tgt_net, device=device)
             loss_t.backward()
             optimizer.step()
-        print("#############test the learned dqn model############")
+        print("Train time/seconds:", time.time() - start_time)
+        print("#############dqn agent testing...############")
         env = gym.make('Pong-v0')
         current_obs = env.reset()
+        start_time = time.time()
         while True:
             state_a = np.array([current_obs], copy=False)
             state_v = torch.tensor(state_a, dtype=torch.float).to(device)
@@ -355,4 +359,5 @@ class FractalMC(Swarm):
             if _end:
                 print('game over. reward total was %f' % reward_sum)
                 break
+        print("Test time:/seconds:", time.time() - start_time)
         print("################test over##########################")
