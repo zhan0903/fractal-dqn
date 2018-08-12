@@ -24,7 +24,7 @@ time_horizon = 30#30  # 50 frames should be enough to realise you have been eate
 if __name__ == "__main__":
     # 16个并行环境，创建16个进程
     env = ParallelEnvironment(name=name,env_class=AtariEnvironment,
-                              blocking=False, n_workers=4, n_repeat_action=n_repeat_action)  # We will play an Atari game
+                              blocking=False, n_workers=16, n_repeat_action=n_repeat_action)  # We will play an Atari game
     model = RandomDiscreteModel(max_wakers=max_walkers,
                                 n_actions=env.n_actions)# The Agent will take discrete actions at random
     # print(env.unwrapped.get_action_meanings())
